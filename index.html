@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#111316">
+<title>Off-Cuff Camera</title>
+<style>
+:root{ --bg:#111316; --panel:#181b20; --line:#272b32; --fg:#e9e6e1; --muted:#8d929b; --accent:#e2b4a6; --rec:#e5574c; color-scheme:dark;
+  --sans:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; --mono:ui-monospace,Menlo,Consolas,monospace; }
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html,body{height:100%;margin:0;background:var(--bg);color:var(--fg);font:15px/1.45 var(--sans)}
+.wrap{display:flex;flex-direction:column;height:100%;padding:calc(env(safe-area-inset-top,0px) + 14px) 16px calc(env(safe-area-inset-bottom,0px) + 14px);gap:12px}
+header{display:flex;justify-content:space-between;align-items:center;gap:10px}
+h1{margin:0;font:500 18px Georgia,serif}
+.pill{display:flex;align-items:center;gap:8px;font:12px var(--mono);color:var(--muted);border:1px solid var(--line);border-radius:999px;padding:6px 11px}
+.pill i{width:8px;height:8px;border-radius:50%;background:var(--line)}
+.pill.live{color:var(--fg);border-color:rgba(229,87,76,.6)} .pill.live i{background:var(--rec)}
+.pill.wait i{background:var(--accent)}
+.stage{position:relative;flex:1;min-height:0;border-radius:12px;overflow:hidden;background:#000;border:1px solid var(--line)}
+video{width:100%;height:100%;object-fit:contain;display:block;background:#000}
+.over{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:20px;text-align:center;background:rgba(17,19,22,.85)}
+.over p{margin:0;color:var(--muted);max-width:32ch}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+button{font:500 15px var(--sans);color:var(--fg);background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px 16px;min-height:46px}
+button.primary{background:var(--fg);color:var(--bg);border-color:var(--fg)}
+button:disabled{opacity:.4}
+input[type=text]{flex:1;min-width:0;background:var(--panel);color:var(--fg);border:1px solid var(--line);border-radius:10px;padding:12px;font:16px var(--mono);letter-spacing:.06em;text-transform:lowercase}
+input[type=range]{flex:1;accent-color:var(--accent)}
+.ctrl{display:flex;flex-direction:column;gap:10px}
+.lbl{font:12px var(--mono);color:var(--muted);min-width:44px}
+.hint{color:var(--muted);font-size:13px}
+.dim{position:fixed;inset:0;background:#000;display:flex;align-items:flex-end;justify-content:center;padding-bottom:40px;color:#444;font:13px var(--mono);z-index:5}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Off-Cuff Camera</h1>
+    <div class="pill" id="pill"><i></i><span id="status">Not connected</span></div>
+  </header>
+
+  <div class="stage">
+    <video id="v" playsinline muted autoplay></video>
+    <div class="over" id="over">
+      <div id="codeBox" hidden class="row" style="width:100%;max-width:340px">
+        <input type="text" id="code" placeholder="code from the studio" autocomplete="off" autocapitalize="off" spellcheck="false">
+      </div>
+      <button class="primary" id="go">Start camera</button>
+      <p id="overMsg">Scan the QR code in the studio, or type the code it shows. Keep your phone on the same Wi-Fi as the laptop.</p>
+    </div>
+  </div>
+
+  <div class="ctrl" id="ctrl" hidden>
+    <div class="row"><span class="lbl">Zoom</span><input type="range" id="zoom" min="1" max="1" step="0.1" value="1"><span class="lbl" id="zoomOut">1.0×</span></div>
+    <div class="row">
+      <button id="flip">Flip camera</button>
+      <button id="torch" hidden>Light</button>
+      <button id="dimBtn">Dim screen</button>
+    </div>
+    <div class="hint">Everything can also be controlled from the studio on your laptop. Keep this page open and your charger plugged in.</div>
+  </div>
+</div>
+<div class="dim" id="dim" hidden>Streaming · tap to wake</div>
+
+<script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.5/dist/peerjs.min.js"></script>
+<script>
+const $=id=>document.getElementById(id);
+const params=new URLSearchParams(location.hash.slice(1));
+let target=params.get("id")||"";
+if(!target) $("codeBox").hidden=false;
+
+let stream=null, track=null, peer=null, call=null, conn=null, facing="environment", height=1080, wake=null, devices=[];
+const setStatus=(t,mode)=>{ $("status").textContent=t; $("pill").className="pill"+(mode?" "+mode:""); };
+
+async function listLenses(){
+  try{ const d=await navigator.mediaDevices.enumerateDevices();
+    devices=d.filter(x=>x.kind==="videoinput").map((x,i)=>({id:x.deviceId,label:x.label||("Camera "+(i+1)), back:/back|rear|environment/i.test(x.label)})); }catch(e){ devices=[]; }
+}
+async function openCamera(opts){
+  const v={width:{ideal:Math.round(height*16/9)},height:{ideal:height},frameRate:{ideal:30},zoom:true};
+  if(opts&&opts.deviceId) v.deviceId={exact:opts.deviceId}; else v.facingMode={ideal:facing};
+  let s;
+  try{ s=await navigator.mediaDevices.getUserMedia({video:v,audio:false}); }
+  catch(e){ delete v.zoom; s=await navigator.mediaDevices.getUserMedia({video:v,audio:false}); }
+  const old=stream; stream=s; track=s.getVideoTracks()[0]; $("v").srcObject=s;
+  try{ track.contentHint="detail"; }catch(e){}
+  const st=track.getSettings(); if(st.facingMode) facing=st.facingMode;
+  // hand the new track to the laptop without reconnecting
+  if(call && call.peerConnection){ const snd=call.peerConnection.getSenders().find(x=>x.track&&x.track.kind==="video"); if(snd){ await snd.replaceTrack(track); tuneSender(snd); } }
+  if(old) old.getTracks().forEach(t=>t.stop());
+  await listLenses(); paintLocal(); sendCaps();
+}
+function tuneSender(snd){
+  try{ const p=snd.getParameters(); if(!p.encodings||!p.encodings.length) p.encodings=[{}];
+    p.encodings[0].maxBitrate=height>=1080?8_000_000:4_000_000; p.encodings[0].maxFramerate=30; p.degradationPreference="maintain-resolution"; snd.setParameters(p).catch(()=>{}); }catch(e){}
+}
+function capsPayload(){
+  const c=track.getCapabilities?track.getCapabilities():{}, s=track.getSettings();
+  const pick=o=>{ const r={}; ["zoom","torch","focusMode","focusDistance","exposureMode","exposureCompensation","whiteBalanceMode","colorTemperature","width","height","frameRate"].forEach(k=>{ if(o[k]!==undefined) r[k]=o[k]; }); return r; };
+  return {t:"caps",c:pick(c),s:{...pick(s),facingMode:s.facingMode||facing,deviceId:s.deviceId},lenses:devices,height};
+}
+function sendCaps(){ if(conn&&conn.open) conn.send(capsPayload()); }
+function paintLocal(){
+  const c=track.getCapabilities?track.getCapabilities():{}, s=track.getSettings();
+  const z=$("zoom");
+  if(c.zoom){ z.min=c.zoom.min; z.max=c.zoom.max; z.step=c.zoom.step||0.1; z.value=s.zoom||c.zoom.min; z.disabled=false; } else { z.min=1; z.max=1; z.value=1; z.disabled=true; }
+  $("zoomOut").textContent=(+z.value).toFixed(1)+"×";
+  $("torch").hidden=!c.torch;
+}
+async function setConstraint(k,v){
+  if(!track) return;
+  const a={}; a[k]=v;
+  if(k==="focusDistance") a.focusMode="manual";
+  if(k==="colorTemperature") a.whiteBalanceMode="manual";
+  if(k==="exposureCompensation") a.exposureMode="continuous";
+  try{ await track.applyConstraints({advanced:[a]}); }catch(e){}
+  paintLocal(); sendCaps();
+}
+async function handle(m){
+  if(!m||typeof m!=="object") return;
+  if(m.t==="set") await setConstraint(m.k,m.v);
+  else if(m.t==="flip"){ facing = facing==="user" ? "environment" : "user"; await openCamera(); }
+  else if(m.t==="lens"){ await openCamera({deviceId:m.id}); }
+  else if(m.t==="res"){ height=m.h; await openCamera({deviceId:track.getSettings().deviceId}); }
+  else if(m.t==="refocus"){ await setConstraint("focusMode","single-shot"); setTimeout(()=>setConstraint("focusMode","continuous"),800); }
+  else if(m.t==="hello") sendCaps();
+}
+function bitrateSdp(sdp){ // let the video use up to ~8 Mbps on the local network
+  const L=sdp.split("\r\n"); const m=L.findIndex(l=>l.startsWith("m=video")); if(m<0) return sdp;
+  for(let i=m+1;i<L.length && !L[i].startsWith("m=");i++){ if(L[i].startsWith("c=")){ if(!(L[i+1]||"").startsWith("b=")) L.splice(i+1,0,"b=AS:8000"); break; } }
+  return L.join("\r\n"); }
+function connect(){
+  if(!target){ setStatus("Enter the code","wait"); return; }
+  setStatus("Connecting…","wait");
+  if(peer) try{ peer.destroy(); }catch(e){}
+  peer=new Peer();
+  peer.on("open",()=>{
+    conn=peer.connect(target,{reliable:true});
+    conn.on("open",()=>{ sendCaps(); });
+    conn.on("data",handle);
+    call=peer.call(target,stream,{sdpTransform:bitrateSdp});
+    call.on("stream",()=>{});
+    const pc=call.peerConnection;
+    if(pc){ pc.addEventListener("connectionstatechange",()=>{
+      const st=pc.connectionState;
+      if(st==="connected"){ setStatus("Live in the studio","live"); $("over").hidden=true; $("ctrl").hidden=false; const snd=pc.getSenders().find(x=>x.track&&x.track.kind==="video"); if(snd) tuneSender(snd); }
+      if(st==="failed"||st==="disconnected"){ setStatus("Reconnecting…","wait"); setTimeout(connect,2000); }
+    }); }
+    call.on("close",()=>{ setStatus("Disconnected"); $("over").hidden=false; $("overMsg").textContent="The studio closed the connection. Tap Start to reconnect."; });
+  });
+  peer.on("error",e=>{
+    if(e.type==="peer-unavailable"){ setStatus("Studio not found","wait"); $("over").hidden=false; $("overMsg").textContent="Couldn't find the studio. In the studio click “Use phone camera”, then scan the new QR code."; }
+    else { setStatus("Connection problem","wait"); $("overMsg").textContent="Connection problem ("+e.type+"). Check both devices are online, then tap Start."; $("over").hidden=false; }
+  });
+}
+$("go").onclick=async()=>{
+  if(!target){ target=$("code").value.trim().toLowerCase(); if(target && !target.startsWith("offcuff-")) target="offcuff-"+target; }
+  if(!target){ $("overMsg").textContent="Type the code shown in the studio first."; return; }
+  if(!window.Peer){ $("overMsg").textContent="Couldn't load the connection library. Check your internet and reload."; return; }
+  try{ await openCamera(); }catch(e){ $("overMsg").textContent = e.name==="NotAllowedError" ? "Camera permission was blocked. Allow it in Chrome's site settings and try again." : "Couldn't open the camera ("+e.name+")."; return; }
+  try{ wake=await navigator.wakeLock.request("screen"); }catch(e){}
+  $("go").textContent="Reconnect"; connect();
+};
+document.addEventListener("visibilitychange",async()=>{ if(document.visibilityState==="visible" && stream){ try{ wake=await navigator.wakeLock.request("screen"); }catch(e){} } });
+$("zoom").oninput=e=>{ $("zoomOut").textContent=(+e.target.value).toFixed(1)+"×"; setConstraint("zoom",+e.target.value); };
+$("flip").onclick=()=>handle({t:"flip"});
+$("torch").onclick=()=>{ const on=!(track.getSettings().torch); setConstraint("torch",on); };
+$("dimBtn").onclick=()=>{ $("dim").hidden=false; };
+$("dim").onclick=()=>{ $("dim").hidden=true; };
+</script>
+</body>
+</html>
