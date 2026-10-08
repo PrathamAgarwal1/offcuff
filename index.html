@@ -69,6 +69,7 @@ input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
         <input type="text" id="code" placeholder="code from the studio" autocomplete="off" autocapitalize="off" spellcheck="false">
       </div>
       <button class="primary" id="go">Start camera</button>
+      <div class="hint" id="codeLine" hidden>Studio code <b id="codeShow" style="font-family:var(--mono);color:var(--accent);letter-spacing:.1em"></b> · <a href="#" id="changeCode" style="color:var(--fg)">Change</a></div>
       <p id="overMsg">Scan the QR code in the studio, or type the code it shows. Keep your phone on the same Wi-Fi as the laptop.</p>
     </div>
   </div>
@@ -142,9 +143,17 @@ input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
 </script>
 <script>
 const $=id=>document.getElementById(id);
+function paintCode(){ const c=(target||"").replace(/^offcuff-/,""); $("codeLine").hidden=!c; $("codeShow").textContent=c; }
 const params=new URLSearchParams(location.hash.slice(1));
 let target=params.get("id")||"";
+const saved0=(()=>{ try{ return JSON.parse(localStorage.getItem("ocp.target")||'""'); }catch(e){ return ""; } })();
+if(!target && saved0) target=saved0;
+if(target){ try{ localStorage.setItem("ocp.target",JSON.stringify(target)); }catch(e){} }
 if(!target) $("codeBox").hidden=false;
+paintCode();
+// scanning a new QR while this page is open only changes the #id part of the link, so reload to pick it up
+window.addEventListener("hashchange",()=>{ const n=new URLSearchParams(location.hash.slice(1)).get("id"); if(n && n!==target){ try{ localStorage.setItem("ocp.target",JSON.stringify(n)); }catch(e){} location.reload(); } });
+$("changeCode").onclick=e=>{ e.preventDefault(); connecting=false; clearTimeout(retryT); try{ peer&&peer.destroy(); }catch(_){} target=""; $("codeBox").hidden=false; $("code").value=""; $("code").focus(); paintCode(); $("go").textContent="Start camera"; $("overMsg").textContent="Type the 6-letter code shown in the studio."; };
 const saved=(k,d)=>{ try{ const v=localStorage.getItem("ocp."+k); return v==null?d:JSON.parse(v); }catch(e){ return d; } };
 const keep=(k,v)=>{ try{ localStorage.setItem("ocp."+k,JSON.stringify(v)); }catch(e){} };
 
@@ -328,9 +337,11 @@ function connect(){
   peer=new Peer(Object.assign({debug:0}, window.OFFCUFF_RELAY||{}));
   const slow=setTimeout(()=>{ if(!peer.open) $("overMsg").textContent="Still reaching the relay… slow networks can take up to 30 seconds."; },8000);
   peer.on("open",()=>{
-    clearTimeout(slow); $("overMsg").textContent="Step 2 of 3 · finding the studio…";
+    clearTimeout(slow); $("overMsg").textContent="Step 2 of 3 · finding studio "+target.replace(/^offcuff-/,"")+"…";
+    const noAnswer=setTimeout(()=>{ if(connecting && !(conn&&conn.open)) retry("Studio "+target.replace(/^offcuff-/,"")+" isn't answering. Check the studio shows this same code and says “Ready ✓”."); },12000);
+    peer.on("close",()=>clearTimeout(noAnswer));
     conn=peer.connect(target,{reliable:true});
-    conn.on("open",()=>{ tries=0; sendCaps(); $("overMsg").textContent="Step 3 of 3 · starting video…"; });
+    conn.on("open",()=>{ clearTimeout(noAnswer); tries=0; sendCaps(); $("overMsg").textContent="Step 3 of 3 · starting video…"; });
     conn.on("data",handle);
     call=peer.call(target,stream,{sdpTransform:tuneSdp});
     const pc=call.peerConnection;
@@ -360,7 +371,7 @@ function retry(msg,hard){
   clearTimeout(retryT); retryT=setTimeout(connect, Math.min(2000+tries*1000,6000));
 }
 $("go").onclick=async()=>{
-  if(!target){ target=$("code").value.trim().toLowerCase(); if(target && !target.startsWith("offcuff-")) target="offcuff-"+target; }
+  if(!target){ target=$("code").value.trim().toLowerCase().replace(/\s+/g,""); if(target && !target.startsWith("offcuff-")) target="offcuff-"+target; if(target){ try{ localStorage.setItem("ocp.target",JSON.stringify(target)); }catch(e){} $("codeBox").hidden=true; paintCode(); } }
   if(!target){ $("overMsg").textContent="Type the code shown in the studio first."; return; }
   if(!window.Peer){ $("overMsg").textContent="Couldn't load the connection library. Check your internet and reload."; return; }
   try{ await openCamera({keepLens:true}); }catch(e){ $("overMsg").textContent = e.name==="NotAllowedError" ? "Camera permission was blocked. Allow it in Chrome's site settings and try again." : "Couldn't open the camera ("+e.name+")."; return; }
