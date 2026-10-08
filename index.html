@@ -314,32 +314,50 @@ function qualityHints(sdp){
   const L=sdp.split("\r\n"); let inVideo=false; const pts={}; const fmtp={};
   L.forEach((l,i)=>{ if(l.startsWith("m=")) inVideo=l.startsWith("m=video"); if(!inVideo) return;
     const r=l.match(/^a=rtpmap:(\d+) (H264|VP8|VP9|AV1)\//i); if(r) pts[r[1]]=i; const f=l.match(/^a=fmtp:(\d+) /); if(f) fmtp[f[1]]=i; });
-  const hint="x-google-start-bitrate=6000;x-google-min-bitrate=2500;x-google-max-bitrate=12000";
+  const hint="x-google-start-bitrate=5000;x-google-min-bitrate=800;x-google-max-bitrate=12000";
   Object.keys(pts).sort((a,b)=>pts[b]-pts[a]).forEach(pt=>{ if(fmtp[pt]!==undefined){ if(!/x-google-start/.test(L[fmtp[pt]])) L[fmtp[pt]]+=";"+hint; } else L.splice(pts[pt]+1,0,"a=fmtp:"+pt+" "+hint); });
   return L.join("\r\n");
 }
+let tries=0, connecting=false, everLive=false, retryT=0;
+const say=(t,mode,over)=>{ setStatus(t,mode); if(over!==undefined){ $("over").hidden=!over; } };
 function connect(){
   if(!target){ setStatus("Enter the code","wait"); return; }
-  setStatus("Connecting…","wait");
-  if(peer) try{ peer.destroy(); }catch(e){}
-  peer=new Peer();
+  clearTimeout(retryT); connecting=true;
+  say("Contacting the studio…","wait"); $("overMsg").textContent="Step 1 of 3 · reaching the relay…";
+  try{ peer&&peer.destroy(); }catch(e){}
+  peer=new Peer(Object.assign({debug:0}, window.OFFCUFF_RELAY||{}));
+  const slow=setTimeout(()=>{ if(!peer.open) $("overMsg").textContent="Still reaching the relay… slow networks can take up to 30 seconds."; },8000);
   peer.on("open",()=>{
+    clearTimeout(slow); $("overMsg").textContent="Step 2 of 3 · finding the studio…";
     conn=peer.connect(target,{reliable:true});
-    conn.on("open",()=>{ sendCaps(); });
+    conn.on("open",()=>{ tries=0; sendCaps(); $("overMsg").textContent="Step 3 of 3 · starting video…"; });
     conn.on("data",handle);
     call=peer.call(target,stream,{sdpTransform:tuneSdp});
     const pc=call.peerConnection;
-    if(pc){ pc.addEventListener("connectionstatechange",()=>{
-      const st=pc.connectionState;
-      if(st==="connected"){ setStatus("Live in the studio","live"); $("over").hidden=true; $("panel").hidden=false; const snd=pc.getSenders().find(x=>x.track&&x.track.kind==="video"); if(snd) tuneSender(snd); }
-      if(st==="failed"||st==="disconnected"){ setStatus("Reconnecting…","wait"); setTimeout(connect,2000); }
-    }); }
-    call.on("close",()=>{ setStatus("Disconnected"); $("over").hidden=false; $("overMsg").textContent="The studio closed the connection. Tap Start to reconnect."; });
+    if(pc){
+      pc.addEventListener("iceconnectionstatechange",()=>{ const st=pc.iceConnectionState; if(st==="checking") $("overMsg").textContent="Step 3 of 3 · connecting video to your laptop…"; });
+      let dropT=0;
+      pc.addEventListener("connectionstatechange",()=>{
+        const st=pc.connectionState;
+        if(st==="connected"){ clearTimeout(dropT); everLive=true; tries=0; say("Live in the studio","live",false); $("panel").hidden=false; const snd=pc.getSenders().find(x=>x.track&&x.track.kind==="video"); if(snd) tuneSender(snd); }
+        if(st==="disconnected"){ say("Signal weak…","wait"); clearTimeout(dropT); dropT=setTimeout(()=>{ if(pc.connectionState!=="connected") retry("Connection dropped, reconnecting…"); },6000); }   // often recovers by itself
+        if(st==="failed"){ retry("Video couldn't get through. Check both devices are on the same Wi-Fi (not a guest network).",true); }
+      });
+    }
+    call.on("close",()=>{ if(connecting) retry("The studio closed the connection, reconnecting…"); });
   });
   peer.on("error",e=>{
-    if(e.type==="peer-unavailable"){ setStatus("Studio not found","wait"); $("over").hidden=false; $("overMsg").textContent="Couldn't find the studio. In the studio click “Use phone camera”, then scan the new QR code."; }
-    else { setStatus("Connection problem","wait"); $("overMsg").textContent="Connection problem ("+e.type+"). Check both devices are online, then tap Start."; $("over").hidden=false; }
+    clearTimeout(slow);
+    if(e.type==="peer-unavailable") retry("Waiting for the studio… make sure it says “Ready ✓”. If the code changed, scan the new QR.");
+    else if(e.type==="network"||e.type==="server-error"||e.type==="socket-error"||e.type==="socket-closed") retry("Can't reach the relay ("+e.type+"). Check the phone's internet.");
+    else retry("Connection problem ("+e.type+"), retrying…");
   });
+}
+function retry(msg,hard){
+  if(!connecting) return;
+  tries++; say(tries>12?"Not connecting":"Retrying…","wait",true); $("overMsg").textContent=msg+(tries>12?" Tap Reconnect to try again.":"");
+  if(tries>12 || hard && tries>3){ connecting=false; return; }
+  clearTimeout(retryT); retryT=setTimeout(connect, Math.min(2000+tries*1000,6000));
 }
 $("go").onclick=async()=>{
   if(!target){ target=$("code").value.trim().toLowerCase(); if(target && !target.startsWith("offcuff-")) target="offcuff-"+target; }
@@ -347,7 +365,7 @@ $("go").onclick=async()=>{
   if(!window.Peer){ $("overMsg").textContent="Couldn't load the connection library. Check your internet and reload."; return; }
   try{ await openCamera({keepLens:true}); }catch(e){ $("overMsg").textContent = e.name==="NotAllowedError" ? "Camera permission was blocked. Allow it in Chrome's site settings and try again." : "Couldn't open the camera ("+e.name+")."; return; }
   try{ wake=await navigator.wakeLock.request("screen"); }catch(e){}
-  $("panel").hidden=false; $("go").textContent="Reconnect"; connect();
+  $("panel").hidden=false; $("go").textContent="Reconnect"; tries=0; connect();
 };
 document.addEventListener("visibilitychange",async()=>{ if(document.visibilityState==="visible" && stream){ try{ wake=await navigator.wakeLock.request("screen"); }catch(e){} } });
 </script>
