@@ -70,10 +70,12 @@ input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
       </div>
       <button class="primary" id="go">Start camera</button>
       <div class="hint" id="codeLine" hidden>Studio code <b id="codeShow" style="font-family:var(--mono);color:var(--accent);letter-spacing:.1em"></b> · <a href="#" id="changeCode" style="color:var(--fg)">Change</a></div>
+      <div class="hint" id="failTips" hidden style="text-align:left;max-width:34ch">If it won't connect: <b>1.</b> make sure the studio says “Ready ✓” with the same code · <b>2.</b> laptop and phone on the same Wi-Fi, not a guest network · <b>3.</b> most reliable: turn on your phone's <b>hotspot</b> and connect the laptop to it.</div>
       <p id="overMsg">Scan the QR code in the studio, or type the code it shows. Keep your phone on the same Wi-Fi as the laptop.</p>
     </div>
   </div>
 
+  <div class="hint" id="routeTip" hidden style="border:1px solid var(--accent);border-radius:10px;padding:10px">Your video is going through an internet relay, so it may lag or look soft. Your Wi-Fi is probably blocking devices from talking directly. For a direct, sharp connection: turn on this phone's <b>hotspot</b> and connect the laptop to it, then reconnect.</div>
   <div class="panel" id="panel" hidden>
     <div class="row">
       <button id="flip">Flip</button>
@@ -328,44 +330,54 @@ function qualityHints(sdp){
   return L.join("\r\n");
 }
 let tries=0, connecting=false, everLive=false, retryT=0;
+const live=()=>!!(call&&call.peerConnection&&call.peerConnection.connectionState==="connected");
+async function routeOf(pc){ try{ const r=await pc.getStats(); let pair=null; const c={}; r.forEach(x=>{ if(x.type==="candidate-pair"&&x.state==="succeeded"&&(x.nominated||x.selected)) pair=x; if(x.type==="local-candidate"||x.type==="remote-candidate") c[x.id]=x; });
+  if(!pair) return null; const a=c[pair.localCandidateId], b=c[pair.remoteCandidateId]; return (a&&a.candidateType==="relay")||(b&&b.candidateType==="relay") ? "relay" : "direct"; }catch(e){ return null; } }
 const say=(t,mode,over)=>{ setStatus(t,mode); if(over!==undefined){ $("over").hidden=!over; } };
 function connect(){
   if(!target){ setStatus("Enter the code","wait"); return; }
   clearTimeout(retryT); connecting=true;
   say("Contacting the studio…","wait"); $("overMsg").textContent="Step 1 of 3 · reaching the relay…";
   try{ peer&&peer.destroy(); }catch(e){}
-  peer=new Peer(Object.assign({debug:0}, window.OFFCUFF_RELAY||{}));
+  peer=new Peer(Object.assign({debug:0}, window.OFFCUFF_RELAY||{})); const myPeer=peer;
   const slow=setTimeout(()=>{ if(!peer.open) $("overMsg").textContent="Still reaching the relay… slow networks can take up to 30 seconds."; },8000);
   peer.on("open",()=>{
     clearTimeout(slow); $("overMsg").textContent="Step 2 of 3 · finding studio "+target.replace(/^offcuff-/,"")+"…";
-    const noAnswer=setTimeout(()=>{ if(connecting && !(conn&&conn.open)) retry("Studio "+target.replace(/^offcuff-/,"")+" isn't answering. Check the studio shows this same code and says “Ready ✓”."); },12000);
-    peer.on("close",()=>clearTimeout(noAnswer));
+    let progress=false;   // becomes true once the studio has replied and the two devices are trying routes
+    const code=target.replace(/^offcuff-/,"");
+    const t1=setTimeout(()=>{ if(!connecting||live()) return;
+      if(!progress) retry("Studio "+code+" isn't answering. Check the studio shows this same code and says “Ready ✓”.");
+      else $("overMsg").textContent="Step 3 of 3 · still connecting… your Wi-Fi may be blocking a direct link, so it's going through an internet relay. This can take up to 30 seconds."; },15000);
+    const t2=setTimeout(()=>{ if(connecting && !live()) retry("Couldn't get a connection through. See the tips below.",true); },50000);
+    const noAnswer={}; peer.on("close",()=>{ clearTimeout(t1); clearTimeout(t2); });
     conn=peer.connect(target,{reliable:true});
-    conn.on("open",()=>{ clearTimeout(noAnswer); tries=0; sendCaps(); $("overMsg").textContent="Step 3 of 3 · starting video…"; });
+    conn.on("open",()=>{ progress=true; tries=0; sendCaps(); $("overMsg").textContent="Step 3 of 3 · starting video…"; });
     conn.on("data",handle);
     call=peer.call(target,stream,{sdpTransform:tuneSdp});
     const pc=call.peerConnection;
     if(pc){
-      pc.addEventListener("iceconnectionstatechange",()=>{ const st=pc.iceConnectionState; if(st==="checking") $("overMsg").textContent="Step 3 of 3 · connecting video to your laptop…"; });
+      pc.addEventListener("iceconnectionstatechange",()=>{ const st=pc.iceConnectionState; if(st==="checking"){ progress=true; $("overMsg").textContent="Step 3 of 3 · connecting video to your laptop…"; } });
+      pc.addEventListener("signalingstatechange",()=>{ if(pc.signalingState==="stable") progress=true; });   // the studio answered
       let dropT=0;
       pc.addEventListener("connectionstatechange",()=>{
         const st=pc.connectionState;
-        if(st==="connected"){ clearTimeout(dropT); everLive=true; tries=0; say("Live in the studio","live",false); $("panel").hidden=false; const snd=pc.getSenders().find(x=>x.track&&x.track.kind==="video"); if(snd) tuneSender(snd); }
-        if(st==="disconnected"){ say("Signal weak…","wait"); clearTimeout(dropT); dropT=setTimeout(()=>{ if(pc.connectionState!=="connected") retry("Connection dropped, reconnecting…"); },6000); }   // often recovers by itself
-        if(st==="failed"){ retry("Video couldn't get through. Check both devices are on the same Wi-Fi (not a guest network).",true); }
+        if(st==="connected"){ if(peer!==myPeer) return; connecting=true; clearTimeout(retryT); $("failTips").hidden=true; clearTimeout(dropT); everLive=true; tries=0; say("Live in the studio","live",false); routeOf(pc).then(r=>{ if(r) say("Live · "+(r==="relay"?"via internet relay (slower)":"direct over Wi-Fi"),"live"); $("routeTip").hidden=r!=="relay"; }); $("panel").hidden=false; const snd=pc.getSenders().find(x=>x.track&&x.track.kind==="video"); if(snd) tuneSender(snd); }
+        if(st==="disconnected"){ say("Signal weak…","wait"); clearTimeout(dropT); dropT=setTimeout(()=>{ if(pc.connectionState!=="connected") retry("Connection dropped, reconnecting…"); },10000); }   // often recovers by itself
+        if(st==="failed" && peer===myPeer){ retry("Video couldn't get through. Check both devices are on the same Wi-Fi (not a guest network).",true); }
       });
     }
-    call.on("close",()=>{ if(connecting) retry("The studio closed the connection, reconnecting…"); });
+    call.on("close",()=>{ if(connecting && peer===myPeer) retry("The studio closed the connection, reconnecting…"); });
   });
   peer.on("error",e=>{
     clearTimeout(slow);
     if(e.type==="peer-unavailable") retry("Waiting for the studio… make sure it says “Ready ✓”. If the code changed, scan the new QR.");
     else if(e.type==="network"||e.type==="server-error"||e.type==="socket-error"||e.type==="socket-closed") retry("Can't reach the relay ("+e.type+"). Check the phone's internet.");
+    else if(e.type==="webrtc"||e.type==="negotiation-failed"||e.type==="disconnected"){ /* one leg hiccuped; let the connection timers decide instead of tearing everything down */ }
     else retry("Connection problem ("+e.type+"), retrying…");
   });
 }
 function retry(msg,hard){
-  if(!connecting) return;
+  if(!connecting) return; if(tries>=2) $("failTips").hidden=false;
   tries++; say(tries>12?"Not connecting":"Retrying…","wait",true); $("overMsg").textContent=msg+(tries>12?" Tap Reconnect to try again.":"");
   if(tries>12 || hard && tries>3){ connecting=false; return; }
   clearTimeout(retryT); retryT=setTimeout(connect, Math.min(2000+tries*1000,6000));
