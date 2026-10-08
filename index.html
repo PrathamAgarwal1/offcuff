@@ -2,36 +2,52 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
 <meta name="theme-color" content="#111316">
 <title>Off-Cuff Camera</title>
 <style>
 :root{ --bg:#111316; --panel:#181b20; --line:#272b32; --fg:#e9e6e1; --muted:#8d929b; --accent:#e2b4a6; --rec:#e5574c; color-scheme:dark;
   --sans:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; --mono:ui-monospace,Menlo,Consolas,monospace; }
-*{box-sizing:border-box}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 [hidden]{display:none!important}
 html,body{height:100%;margin:0;background:var(--bg);color:var(--fg);font:15px/1.45 var(--sans)}
-.wrap{display:flex;flex-direction:column;height:100%;padding:calc(env(safe-area-inset-top,0px) + 14px) 16px calc(env(safe-area-inset-bottom,0px) + 14px);gap:12px}
+.wrap{display:flex;flex-direction:column;height:100%;padding:calc(env(safe-area-inset-top,0px) + 12px) 14px calc(env(safe-area-inset-bottom,0px) + 12px);gap:10px}
 header{display:flex;justify-content:space-between;align-items:center;gap:10px}
-h1{margin:0;font:500 18px Georgia,serif}
+h1{margin:0;font:500 17px Georgia,serif}
 .pill{display:flex;align-items:center;gap:8px;font:12px var(--mono);color:var(--muted);border:1px solid var(--line);border-radius:999px;padding:6px 11px}
 .pill i{width:8px;height:8px;border-radius:50%;background:var(--line)}
 .pill.live{color:var(--fg);border-color:rgba(229,87,76,.6)} .pill.live i{background:var(--rec)}
 .pill.wait i{background:var(--accent)}
-.stage{position:relative;flex:1;min-height:0;border-radius:12px;overflow:hidden;background:#000;border:1px solid var(--line)}
+.stage{position:relative;flex:1 1 auto;min-height:180px;border-radius:12px;overflow:hidden;background:#000;border:1px solid var(--line);touch-action:none}
 video{width:100%;height:100%;object-fit:contain;display:block;background:#000}
-.over{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:20px;text-align:center;background:rgba(17,19,22,.85)}
+video.mirror{transform:scaleX(-1)}
+.grid{position:absolute;inset:0;pointer-events:none;background:
+  linear-gradient(to right,transparent calc(33.33% - .5px),rgba(255,255,255,.35) calc(33.33% - .5px),rgba(255,255,255,.35) calc(33.33% + .5px),transparent calc(33.33% + .5px),transparent calc(66.66% - .5px),rgba(255,255,255,.35) calc(66.66% - .5px),rgba(255,255,255,.35) calc(66.66% + .5px),transparent calc(66.66% + .5px)),
+  linear-gradient(to bottom,transparent calc(33.33% - .5px),rgba(255,255,255,.35) calc(33.33% - .5px),rgba(255,255,255,.35) calc(33.33% + .5px),transparent calc(33.33% + .5px),transparent calc(66.66% - .5px),rgba(255,255,255,.35) calc(66.66% - .5px),rgba(255,255,255,.35) calc(66.66% + .5px),transparent calc(66.66% + .5px))}
+.level{position:absolute;left:50%;top:50%;width:120px;height:2px;margin-left:-60px;background:rgba(255,255,255,.7);border-radius:2px;pointer-events:none;transition:background .2s}
+.level.ok{background:#9fcfa6}
+.hud{position:absolute;left:10px;top:10px;font:11px var(--mono);color:#fff;background:rgba(0,0,0,.45);padding:4px 8px;border-radius:6px;pointer-events:none}
+.zoomhud{position:absolute;right:10px;top:10px;font:12px var(--mono);color:#fff;background:rgba(0,0,0,.45);padding:4px 8px;border-radius:6px;pointer-events:none}
+.focusring{position:absolute;width:70px;height:70px;margin:-35px 0 0 -35px;border:2px solid var(--accent);border-radius:8px;pointer-events:none;opacity:0;transition:opacity .3s}
+.over{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:20px;text-align:center;background:rgba(17,19,22,.88)}
 .over p{margin:0;color:var(--muted);max-width:32ch}
+.panel{flex:0 1 auto;overflow-y:auto;display:flex;flex-direction:column;gap:12px;max-height:46vh;padding-right:2px}
 .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
-button{font:500 15px var(--sans);color:var(--fg);background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px 16px;min-height:46px}
+.lbl{font:11px var(--mono);color:var(--muted);letter-spacing:.06em;text-transform:uppercase}
+.sec{display:flex;flex-direction:column;gap:8px;border-top:1px solid var(--line);padding-top:10px}
+button{font:500 14px var(--sans);color:var(--fg);background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:10px 14px;min-height:42px}
 button.primary{background:var(--fg);color:var(--bg);border-color:var(--fg)}
+button[aria-pressed="true"]{background:var(--fg);color:var(--bg);border-color:var(--fg)}
 button:disabled{opacity:.4}
+.seg{display:flex;gap:6px;flex-wrap:wrap}
+.seg button{padding:8px 12px;min-height:38px;font-size:13px;border-radius:999px}
+select{width:100%;background:var(--panel);color:var(--fg);border:1px solid var(--line);border-radius:10px;padding:10px;font:14px var(--sans)}
 input[type=text]{flex:1;min-width:0;background:var(--panel);color:var(--fg);border:1px solid var(--line);border-radius:10px;padding:12px;font:16px var(--mono);letter-spacing:.06em;text-transform:lowercase}
-input[type=range]{flex:1;accent-color:var(--accent)}
-.ctrl{display:flex;flex-direction:column;gap:10px}
-.lbl{font:12px var(--mono);color:var(--muted);min-width:44px}
-.hint{color:var(--muted);font-size:13px}
+input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
+.val{font:12px var(--mono);color:var(--fg);min-width:52px;text-align:right}
+.hint{color:var(--muted);font-size:12.5px}
 .dim{position:fixed;inset:0;background:#000;display:flex;align-items:flex-end;justify-content:center;padding-bottom:40px;color:#444;font:13px var(--mono);z-index:5}
+@media (orientation:landscape){ .wrap{flex-direction:row;flex-wrap:wrap} header{width:100%} .stage{flex:1 1 60%;height:calc(100% - 50px)} .panel{flex:1 1 34%;max-height:calc(100% - 50px)} }
 </style>
 </head>
 <body>
@@ -41,8 +57,13 @@ input[type=range]{flex:1;accent-color:var(--accent)}
     <div class="pill" id="pill"><i></i><span id="status">Not connected</span></div>
   </header>
 
-  <div class="stage">
+  <div class="stage" id="stage">
     <video id="v" playsinline muted autoplay></video>
+    <div class="grid" id="grid" hidden></div>
+    <div class="level" id="level" hidden></div>
+    <div class="hud" id="hud" hidden></div>
+    <div class="zoomhud" id="zoomHud" hidden></div>
+    <div class="focusring" id="ring"></div>
     <div class="over" id="over">
       <div id="codeBox" hidden class="row" style="width:100%;max-width:340px">
         <input type="text" id="code" placeholder="code from the studio" autocomplete="off" autocapitalize="off" spellcheck="false">
@@ -52,14 +73,59 @@ input[type=range]{flex:1;accent-color:var(--accent)}
     </div>
   </div>
 
-  <div class="ctrl" id="ctrl" hidden>
-    <div class="row"><span class="lbl">Zoom</span><input type="range" id="zoom" min="1" max="1" step="0.1" value="1"><span class="lbl" id="zoomOut">1.0×</span></div>
+  <div class="panel" id="panel" hidden>
     <div class="row">
-      <button id="flip">Flip camera</button>
+      <button id="flip">Flip</button>
       <button id="torch" hidden>Light</button>
+      <button id="full">Fullscreen</button>
       <button id="dimBtn">Dim screen</button>
     </div>
-    <div class="hint">Everything can also be controlled from the studio on your laptop. Keep this page open and your charger plugged in.</div>
+
+    <div class="sec" id="lensSec" hidden>
+      <div class="lbl">Lens</div>
+      <select id="lens"></select>
+    </div>
+
+    <div class="sec" id="zoomSec">
+      <div class="lbl">Zoom <span class="hint">· pinch the preview too</span></div>
+      <div class="row"><input type="range" id="zoom" min="1" max="1" step="0.1" value="1"><span class="val" id="zoomOut">1.0×</span></div>
+      <div class="seg" id="zoomPresets"></div>
+    </div>
+
+    <div class="sec" id="expSec" hidden>
+      <div class="lbl">Brightness</div>
+      <div class="row"><input type="range" id="exp"><span class="val" id="expOut">0</span></div>
+      <div class="seg" id="expMode"></div>
+    </div>
+
+    <div class="sec" id="focusSec" hidden>
+      <div class="lbl">Focus <span class="hint">· tap the preview to focus there</span></div>
+      <div class="seg" id="focusMode"></div>
+      <div class="row" id="focusDistRow" hidden><input type="range" id="focusDist"><span class="val" id="focusDistOut"></span></div>
+    </div>
+
+    <div class="sec" id="wbSec" hidden>
+      <div class="lbl">Colour</div>
+      <div class="seg" id="wbMode"></div>
+      <div class="row" id="wbTempRow" hidden><input type="range" id="wbTemp"><span class="val" id="wbTempOut"></span></div>
+    </div>
+
+    <div class="sec">
+      <div class="lbl">Quality</div>
+      <div class="seg" id="resSeg"><button data-v="720">720p · smoothest</button><button data-v="1080">1080p · sharper</button></div>
+      <div class="seg" id="fpsSeg"><button data-v="24">24 fps</button><button data-v="30">30 fps</button><button data-v="60" id="fps60">60 fps</button></div>
+    </div>
+
+    <div class="sec">
+      <div class="lbl">Framing helpers (phone only)</div>
+      <div class="seg">
+        <button id="gridBtn">Grid</button>
+        <button id="levelBtn">Level</button>
+        <button id="statsBtn">Stats</button>
+        <button id="mirrorBtn">Mirror preview</button>
+      </div>
+      <div class="hint">These only change this screen, not the video. Everything here can also be controlled from the studio. Keep the charger plugged in.</div>
+    </div>
   </div>
 </div>
 <div class="dim" id="dim" hidden>Streaming · tap to wake</div>
@@ -70,67 +136,170 @@ const $=id=>document.getElementById(id);
 const params=new URLSearchParams(location.hash.slice(1));
 let target=params.get("id")||"";
 if(!target) $("codeBox").hidden=false;
+const saved=(k,d)=>{ try{ const v=localStorage.getItem("ocp."+k); return v==null?d:JSON.parse(v); }catch(e){ return d; } };
+const keep=(k,v)=>{ try{ localStorage.setItem("ocp."+k,JSON.stringify(v)); }catch(e){} };
 
-let stream=null, track=null, peer=null, call=null, conn=null, facing="environment", height=1080, wake=null, devices=[];
+let stream=null, track=null, peer=null, call=null, conn=null, wake=null, devices=[];
+let facing=saved("facing","environment"), height=saved("height",720), fps=saved("fps",30), lensId=saved("lens","");
 const setStatus=(t,mode)=>{ $("status").textContent=t; $("pill").className="pill"+(mode?" "+mode:""); };
 
+// ---------- camera ----------
 async function listLenses(){
   try{ const d=await navigator.mediaDevices.enumerateDevices();
-    devices=d.filter(x=>x.kind==="videoinput").map((x,i)=>({id:x.deviceId,label:x.label||("Camera "+(i+1)), back:/back|rear|environment/i.test(x.label)})); }catch(e){ devices=[]; }
+    devices=d.filter(x=>x.kind==="videoinput").map((x,i)=>({id:x.deviceId,label:x.label||("Camera "+(i+1)),back:/back|rear|environment/i.test(x.label)})); }catch(e){ devices=[]; }
 }
 async function openCamera(opts){
-  const v={width:{ideal:Math.round(height*16/9)},height:{ideal:height},frameRate:{ideal:30},zoom:true};
-  if(opts&&opts.deviceId) v.deviceId={exact:opts.deviceId}; else v.facingMode={ideal:facing};
+  opts=opts||{};
+  const v={width:{ideal:Math.round(height*16/9)},height:{ideal:height},frameRate:{ideal:fps,max:fps},zoom:true};
+  const dev=opts.deviceId||(opts.keepLens&&lensId)||"";
+  if(dev) v.deviceId={exact:dev}; else v.facingMode={ideal:facing};
   let s;
   try{ s=await navigator.mediaDevices.getUserMedia({video:v,audio:false}); }
-  catch(e){ delete v.zoom; s=await navigator.mediaDevices.getUserMedia({video:v,audio:false}); }
+  catch(e){ delete v.zoom; if(v.deviceId){ delete v.deviceId; v.facingMode={ideal:facing}; } s=await navigator.mediaDevices.getUserMedia({video:v,audio:false}); }
   const old=stream; stream=s; track=s.getVideoTracks()[0]; $("v").srcObject=s;
-  try{ track.contentHint="detail"; }catch(e){}
-  const st=track.getSettings(); if(st.facingMode) facing=st.facingMode;
-  // hand the new track to the laptop without reconnecting
+  try{ track.contentHint="motion"; }catch(e){}           // favour smooth motion over per-frame detail
+  const st=track.getSettings(); if(st.facingMode) facing=st.facingMode; lensId=st.deviceId||""; keep("facing",facing); keep("lens",lensId);
   if(call && call.peerConnection){ const snd=call.peerConnection.getSenders().find(x=>x.track&&x.track.kind==="video"); if(snd){ await snd.replaceTrack(track); tuneSender(snd); } }
   if(old) old.getTracks().forEach(t=>t.stop());
-  await listLenses(); paintLocal(); sendCaps();
+  await listLenses(); paint(); sendCaps();
 }
 function tuneSender(snd){
   try{ const p=snd.getParameters(); if(!p.encodings||!p.encodings.length) p.encodings=[{}];
-    p.encodings[0].maxBitrate=height>=1080?8_000_000:4_000_000; p.encodings[0].maxFramerate=30; p.degradationPreference="maintain-resolution"; snd.setParameters(p).catch(()=>{}); }catch(e){}
+    p.encodings[0].maxBitrate = height>=1080 ? 6_000_000 : 3_500_000;
+    p.encodings[0].maxFramerate = fps;
+    p.encodings[0].networkPriority="high"; p.encodings[0].priority="high";
+    p.degradationPreference="maintain-framerate";       // drop sharpness before dropping frames: smooth beats crisp for talking heads
+    snd.setParameters(p).catch(()=>{}); }catch(e){}
 }
+const caps=()=>track&&track.getCapabilities?track.getCapabilities():{};
+const sets=()=>track?track.getSettings():{};
 function capsPayload(){
-  const c=track.getCapabilities?track.getCapabilities():{}, s=track.getSettings();
+  const c=caps(), s=sets();
   const pick=o=>{ const r={}; ["zoom","torch","focusMode","focusDistance","exposureMode","exposureCompensation","whiteBalanceMode","colorTemperature","width","height","frameRate"].forEach(k=>{ if(o[k]!==undefined) r[k]=o[k]; }); return r; };
-  return {t:"caps",c:pick(c),s:{...pick(s),facingMode:s.facingMode||facing,deviceId:s.deviceId},lenses:devices,height};
+  return {t:"caps",c:pick(c),s:{...pick(s),facingMode:s.facingMode||facing,deviceId:s.deviceId},lenses:devices,height,fps};
 }
 function sendCaps(){ if(conn&&conn.open) conn.send(capsPayload()); }
-function paintLocal(){
-  const c=track.getCapabilities?track.getCapabilities():{}, s=track.getSettings();
-  const z=$("zoom");
-  if(c.zoom){ z.min=c.zoom.min; z.max=c.zoom.max; z.step=c.zoom.step||0.1; z.value=s.zoom||c.zoom.min; z.disabled=false; } else { z.min=1; z.max=1; z.value=1; z.disabled=true; }
-  $("zoomOut").textContent=(+z.value).toFixed(1)+"×";
-  $("torch").hidden=!c.torch;
-}
-async function setConstraint(k,v){
+async function setC(k,v,extra){
   if(!track) return;
-  const a={}; a[k]=v;
+  const a=Object.assign({},extra||{}); a[k]=v;
   if(k==="focusDistance") a.focusMode="manual";
   if(k==="colorTemperature") a.whiteBalanceMode="manual";
-  if(k==="exposureCompensation") a.exposureMode="continuous";
   try{ await track.applyConstraints({advanced:[a]}); }catch(e){}
-  paintLocal(); sendCaps();
+  paint(); sendCaps();
 }
+
+// ---------- phone UI ----------
+function seg(el,items,current,onPick){ el.innerHTML=""; items.forEach(([v,label])=>{ const b=document.createElement("button"); b.textContent=label; b.setAttribute("aria-pressed",String(v)===String(current)); b.onclick=()=>onPick(v); el.appendChild(b); }); }
+function rangeFrom(el,cap,val){ el.min=cap.min; el.max=cap.max; el.step=cap.step||((cap.max-cap.min)/100); el.value=val??cap.min; }
+function paint(){
+  const c=caps(), s=sets();
+  // lens
+  if(devices.length>1){ $("lensSec").hidden=false; const sel=$("lens"); sel.innerHTML="";
+    devices.forEach(d=>{ const o=document.createElement("option"); o.value=d.id; o.textContent=(d.back?"Back · ":"Front · ")+d.label; if(d.id===s.deviceId) o.selected=true; sel.appendChild(o); }); }
+  // zoom
+  if(c.zoom){ $("zoomSec").hidden=false; rangeFrom($("zoom"),c.zoom,s.zoom); $("zoomOut").textContent=(+(s.zoom||c.zoom.min)).toFixed(1)+"×";
+    const presets=[1,2,3,5,10].filter(z=>z>=c.zoom.min-0.01&&z<=c.zoom.max+0.01); if(c.zoom.min<1) presets.unshift(+c.zoom.min.toFixed(1));
+    seg($("zoomPresets"),presets.map(z=>[z,z+"×"]),Math.round((s.zoom||1)*10)/10,z=>setC("zoom",z)); }
+  else $("zoomSec").hidden=true;
+  // exposure
+  if(c.exposureCompensation && c.exposureCompensation.max>c.exposureCompensation.min){ $("expSec").hidden=false; rangeFrom($("exp"),c.exposureCompensation,s.exposureCompensation); $("expOut").textContent=fmtExp(s.exposureCompensation||0);
+    const modes=(c.exposureMode||[]).filter(m=>m==="continuous"||m==="manual");
+    if(modes.length>1) seg($("expMode"),[["continuous","Auto"],["manual","Lock"]],s.exposureMode,m=>setC("exposureMode",m)); else $("expMode").innerHTML=""; }
+  else $("expSec").hidden=true;
+  // focus
+  if(c.focusMode && c.focusMode.length){ $("focusSec").hidden=false;
+    const fm=[["continuous","Auto"]]; if(c.focusMode.includes("manual")) fm.push(["manual","Lock"]);
+    seg($("focusMode"),fm,s.focusMode,m=>setC("focusMode",m));
+    $("focusDistRow").hidden=!(s.focusMode==="manual" && c.focusDistance); if(c.focusDistance&&s.focusMode==="manual"){ rangeFrom($("focusDist"),c.focusDistance,s.focusDistance); $("focusDistOut").textContent=(+s.focusDistance||0).toFixed(2); } }
+  else $("focusSec").hidden=true;
+  // white balance
+  if(c.whiteBalanceMode && c.whiteBalanceMode.length>1){ $("wbSec").hidden=false;
+    seg($("wbMode"),[["continuous","Auto"],["manual","Lock"]],s.whiteBalanceMode,m=>setC("whiteBalanceMode",m));
+    $("wbTempRow").hidden=!(s.whiteBalanceMode==="manual" && c.colorTemperature); if(c.colorTemperature&&s.whiteBalanceMode==="manual"){ rangeFrom($("wbTemp"),c.colorTemperature,s.colorTemperature); $("wbTempOut").textContent=Math.round(s.colorTemperature||0)+"K"; } }
+  else $("wbSec").hidden=true;
+  // torch, quality
+  $("torch").hidden=!c.torch; $("torch").setAttribute("aria-pressed",!!s.torch);
+  $("resSeg").querySelectorAll("button").forEach(b=>b.setAttribute("aria-pressed",+b.dataset.v===height));
+  $("fps60").hidden=!(c.frameRate && c.frameRate.max>=59);
+  $("fpsSeg").querySelectorAll("button").forEach(b=>b.setAttribute("aria-pressed",+b.dataset.v===fps));
+}
+const fmtExp=v=>(v>0?"+":"")+(+v).toFixed(1);
+let tz=null; const later=(k,fn)=>{ clearTimeout(tz&&tz[k]); tz=tz||{}; tz[k]=setTimeout(fn,40); };
+$("zoom").oninput=e=>{ $("zoomOut").textContent=(+e.target.value).toFixed(1)+"×"; later("z",()=>setC("zoom",+e.target.value)); showZoom(+e.target.value); };
+$("exp").oninput=e=>{ $("expOut").textContent=fmtExp(+e.target.value); later("e",()=>setC("exposureCompensation",+e.target.value)); };
+$("focusDist").oninput=e=>{ $("focusDistOut").textContent=(+e.target.value).toFixed(2); later("f",()=>setC("focusDistance",+e.target.value)); };
+$("wbTemp").oninput=e=>{ $("wbTempOut").textContent=Math.round(+e.target.value)+"K"; later("w",()=>setC("colorTemperature",+e.target.value)); };
+$("lens").onchange=e=>openCamera({deviceId:e.target.value});
+$("flip").onclick=()=>handle({t:"flip"});
+$("torch").onclick=()=>setC("torch",!sets().torch);
+$("resSeg").onclick=e=>{ const b=e.target.closest("button"); if(b) handle({t:"res",h:+b.dataset.v}); };
+$("fpsSeg").onclick=e=>{ const b=e.target.closest("button"); if(b) handle({t:"fps",f:+b.dataset.v}); };
+const toggle=(btn,fn)=>{ const on=btn.getAttribute("aria-pressed")!=="true"; btn.setAttribute("aria-pressed",on); fn(on); };
+$("gridBtn").onclick=e=>toggle(e.currentTarget,on=>{ $("grid").hidden=!on; keep("grid",on); });
+$("levelBtn").onclick=e=>toggle(e.currentTarget,on=>{ $("level").hidden=!on; keep("level",on); if(on) startLevel(); });
+$("statsBtn").onclick=e=>toggle(e.currentTarget,on=>{ $("hud").hidden=!on; keep("stats",on); });
+$("mirrorBtn").onclick=e=>toggle(e.currentTarget,on=>{ $("v").classList.toggle("mirror",on); keep("mirrorPrev",on); });
+[["gridBtn","grid"],["levelBtn","level"],["statsBtn","stats"],["mirrorBtn","mirrorPrev"]].forEach(([b,k])=>{ if(saved(k,false)) $(b).click(); });
+$("full").onclick=async()=>{ try{ if(!document.fullscreenElement){ await document.documentElement.requestFullscreen(); try{ await screen.orientation.lock("landscape"); }catch(e){} } else { await document.exitFullscreen(); } }catch(e){} };
+$("dimBtn").onclick=()=>{ $("dim").hidden=false; };
+$("dim").onclick=()=>{ $("dim").hidden=true; };
+
+// pinch to zoom and tap to focus on the preview
+{ const st=$("stage"), pts=new Map(); let startDist=0, startZoom=1, moved=false;
+  st.addEventListener("pointerdown",e=>{ pts.set(e.pointerId,{x:e.clientX,y:e.clientY}); moved=false; if(pts.size===2){ const [a,b]=[...pts.values()]; startDist=Math.hypot(a.x-b.x,a.y-b.y); startZoom=sets().zoom||1; } });
+  st.addEventListener("pointermove",e=>{ if(!pts.has(e.pointerId)) return; const p=pts.get(e.pointerId); if(Math.hypot(e.clientX-p.x,e.clientY-p.y)>8) moved=true; pts.set(e.pointerId,{x:e.clientX,y:e.clientY});
+    if(pts.size===2 && caps().zoom){ const [a,b]=[...pts.values()], d=Math.hypot(a.x-b.x,a.y-b.y), c=caps().zoom; const z=Math.min(c.max,Math.max(c.min,startZoom*d/startDist)); showZoom(z); later("pz",()=>setC("zoom",+z.toFixed(2))); } });
+  const up=e=>{ const single=pts.size===1; pts.delete(e.pointerId); if(single && !moved && !$("over").offsetParent) tapFocus(e); };
+  st.addEventListener("pointerup",up); st.addEventListener("pointercancel",e=>pts.delete(e.pointerId));
+}
+function showZoom(z){ const h=$("zoomHud"); h.textContent=(+z).toFixed(1)+"×"; h.hidden=false; clearTimeout(showZoom.t); showZoom.t=setTimeout(()=>h.hidden=true,1200); }
+async function tapFocus(e){
+  if(!track) return; const r=$("v").getBoundingClientRect(); let x=(e.clientX-r.left)/r.width, y=(e.clientY-r.top)/r.height;
+  if($("v").classList.contains("mirror")) x=1-x;
+  const ring=$("ring"); ring.style.left=(e.clientX-$("stage").getBoundingClientRect().left)+"px"; ring.style.top=(e.clientY-$("stage").getBoundingClientRect().top)+"px"; ring.style.opacity=1; setTimeout(()=>ring.style.opacity=0,900);
+  const c=caps(); const adv={};
+  if(c.pointsOfInterest!==undefined || "pointsOfInterest" in (navigator.mediaDevices.getSupportedConstraints?navigator.mediaDevices.getSupportedConstraints():{})) adv.pointsOfInterest=[{x,y}];
+  if(c.focusMode && c.focusMode.includes("single-shot")) adv.focusMode="single-shot";
+  try{ await track.applyConstraints({advanced:[adv]}); }catch(err){}
+  setTimeout(()=>{ if(c.focusMode&&c.focusMode.includes("continuous")) setC("focusMode","continuous"); },1500);
+}
+// level indicator
+let levelOn=false;
+function startLevel(){ if(levelOn) return; levelOn=true;
+  const go=()=>window.addEventListener("deviceorientation",e=>{ const ang=window.screen.orientation&&Math.abs(screen.orientation.angle)===90 ? e.beta : e.gamma; if(ang==null) return; const a=Math.max(-45,Math.min(45,ang)); const L=$("level"); L.style.transform=`rotate(${-a}deg)`; L.classList.toggle("ok",Math.abs(a)<1.5); });
+  if(window.DeviceOrientationEvent && DeviceOrientationEvent.requestPermission) DeviceOrientationEvent.requestPermission().then(go).catch(()=>{}); else go();
+}
+// stats
+setInterval(async()=>{
+  if($("hud").hidden || !call || !call.peerConnection) return;
+  try{ const r=await call.peerConnection.getStats(); let o=null; r.forEach(x=>{ if(x.type==="outbound-rtp"&&x.kind==="video") o=x; });
+    if(o){ const now=performance.now(), kbps=statsPrev&&o.bytesSent>statsPrev.b ? (o.bytesSent-statsPrev.b)*8/((now-statsPrev.t)) : 0; statsPrev={b:o.bytesSent,t:now};
+      $("hud").textContent=`${o.frameWidth||"?"}×${o.frameHeight||"?"} · ${Math.round(o.framesPerSecond||0)} fps · ${(kbps/1000).toFixed(1)} Mbps · ${o.encoderImplementation||""}`; } }catch(e){}
+},1000);
+let statsPrev=null;
+
+// ---------- messages from the studio ----------
 async function handle(m){
   if(!m||typeof m!=="object") return;
-  if(m.t==="set") await setConstraint(m.k,m.v);
-  else if(m.t==="flip"){ facing = facing==="user" ? "environment" : "user"; await openCamera(); }
+  if(m.t==="set") await setC(m.k,m.v);
+  else if(m.t==="flip"){ facing = facing==="user" ? "environment" : "user"; lensId=""; await openCamera(); }
   else if(m.t==="lens"){ await openCamera({deviceId:m.id}); }
-  else if(m.t==="res"){ height=m.h; await openCamera({deviceId:track.getSettings().deviceId}); }
-  else if(m.t==="refocus"){ await setConstraint("focusMode","single-shot"); setTimeout(()=>setConstraint("focusMode","continuous"),800); }
+  else if(m.t==="res"){ height=m.h; keep("height",height); await openCamera({keepLens:true}); }
+  else if(m.t==="fps"){ fps=m.f; keep("fps",fps); await openCamera({keepLens:true}); }
+  else if(m.t==="refocus"){ await setC("focusMode","single-shot"); setTimeout(()=>setC("focusMode","continuous"),800); }
   else if(m.t==="hello") sendCaps();
 }
-function bitrateSdp(sdp){ // let the video use up to ~8 Mbps on the local network
+
+// ---------- connection ----------
+// Prefer H.264 (hardware encode on the phone, hardware decode on the laptop) and allow a higher bitrate on the local network
+function tuneSdp(sdp){
   const L=sdp.split("\r\n"); const m=L.findIndex(l=>l.startsWith("m=video")); if(m<0) return sdp;
-  for(let i=m+1;i<L.length && !L[i].startsWith("m=");i++){ if(L[i].startsWith("c=")){ if(!(L[i+1]||"").startsWith("b=")) L.splice(i+1,0,"b=AS:8000"); break; } }
-  return L.join("\r\n"); }
+  const end=(()=>{ for(let i=m+1;i<L.length;i++) if(L[i].startsWith("m=")) return i; return L.length; })();
+  const h264=[]; for(let i=m+1;i<end;i++){ const r=L[i].match(/^a=rtpmap:(\d+) H264\//i); if(r) h264.push(r[1]); }
+  if(h264.length){ const parts=L[m].split(" "), head=parts.slice(0,3), pts=parts.slice(3); L[m]=head.concat(h264,pts.filter(p=>!h264.includes(p))).join(" "); }
+  for(let i=m+1;i<end;i++){ if(L[i].startsWith("c=")){ if(!(L[i+1]||"").startsWith("b=")) L.splice(i+1,0,"b=AS:6000"); break; } }
+  return L.join("\r\n");
+}
 function connect(){
   if(!target){ setStatus("Enter the code","wait"); return; }
   setStatus("Connecting…","wait");
@@ -140,12 +309,11 @@ function connect(){
     conn=peer.connect(target,{reliable:true});
     conn.on("open",()=>{ sendCaps(); });
     conn.on("data",handle);
-    call=peer.call(target,stream,{sdpTransform:bitrateSdp});
-    call.on("stream",()=>{});
+    call=peer.call(target,stream,{sdpTransform:tuneSdp});
     const pc=call.peerConnection;
     if(pc){ pc.addEventListener("connectionstatechange",()=>{
       const st=pc.connectionState;
-      if(st==="connected"){ setStatus("Live in the studio","live"); $("over").hidden=true; $("ctrl").hidden=false; const snd=pc.getSenders().find(x=>x.track&&x.track.kind==="video"); if(snd) tuneSender(snd); }
+      if(st==="connected"){ setStatus("Live in the studio","live"); $("over").hidden=true; $("panel").hidden=false; const snd=pc.getSenders().find(x=>x.track&&x.track.kind==="video"); if(snd) tuneSender(snd); }
       if(st==="failed"||st==="disconnected"){ setStatus("Reconnecting…","wait"); setTimeout(connect,2000); }
     }); }
     call.on("close",()=>{ setStatus("Disconnected"); $("over").hidden=false; $("overMsg").textContent="The studio closed the connection. Tap Start to reconnect."; });
@@ -159,16 +327,11 @@ $("go").onclick=async()=>{
   if(!target){ target=$("code").value.trim().toLowerCase(); if(target && !target.startsWith("offcuff-")) target="offcuff-"+target; }
   if(!target){ $("overMsg").textContent="Type the code shown in the studio first."; return; }
   if(!window.Peer){ $("overMsg").textContent="Couldn't load the connection library. Check your internet and reload."; return; }
-  try{ await openCamera(); }catch(e){ $("overMsg").textContent = e.name==="NotAllowedError" ? "Camera permission was blocked. Allow it in Chrome's site settings and try again." : "Couldn't open the camera ("+e.name+")."; return; }
+  try{ await openCamera({keepLens:true}); }catch(e){ $("overMsg").textContent = e.name==="NotAllowedError" ? "Camera permission was blocked. Allow it in Chrome's site settings and try again." : "Couldn't open the camera ("+e.name+")."; return; }
   try{ wake=await navigator.wakeLock.request("screen"); }catch(e){}
-  $("go").textContent="Reconnect"; connect();
+  $("panel").hidden=false; $("go").textContent="Reconnect"; connect();
 };
 document.addEventListener("visibilitychange",async()=>{ if(document.visibilityState==="visible" && stream){ try{ wake=await navigator.wakeLock.request("screen"); }catch(e){} } });
-$("zoom").oninput=e=>{ $("zoomOut").textContent=(+e.target.value).toFixed(1)+"×"; setConstraint("zoom",+e.target.value); };
-$("flip").onclick=()=>handle({t:"flip"});
-$("torch").onclick=()=>{ const on=!(track.getSettings().torch); setConstraint("torch",on); };
-$("dimBtn").onclick=()=>{ $("dim").hidden=false; };
-$("dim").onclick=()=>{ $("dim").hidden=true; };
 </script>
 </body>
 </html>
